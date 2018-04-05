@@ -4,7 +4,7 @@ https://github.com/naver/ai-hackathon-2018
 
 Word-Embadding, LSTM, RNN 사전 지식 습득 
 
-[NSML donwload link](https://github.com/n-CLAIR/File-download/raw/master/nsml/hack/nsml_client.windows.amd64.hack.zip)
+[NSML donwload link window](https://github.com/n-CLAIR/File-download/raw/master/nsml/hack/nsml_client.windows.amd64.hack.zip)
 
 
 # 지식인 질문 유사도 검사
