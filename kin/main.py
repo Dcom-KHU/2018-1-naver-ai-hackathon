@@ -1,23 +1,5 @@
 # -*- coding: utf-8 -*-
 
-"""
-Copyright 2018 NAVER Corp.
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
-associated documentation files (the "Software"), to deal in the Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to
-the following conditions:
-The above copyright notice and this permission notice shall be included in all copies or substantial
-portions of the Software.
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
-CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
-OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-"""
-
-
 import argparse
 import os
 
@@ -103,9 +85,9 @@ if __name__ == '__main__':
     # User options
     args.add_argument('--output', type=int, default=1)
     args.add_argument('--epochs', type=int, default=10)
-    args.add_argument('--batch', type=int, default=2000)
+    args.add_argument('--batch', type=int, default=3000)
     args.add_argument('--strmaxlen', type=int, default=400)
-    args.add_argument('--embedding', type=int, default=8)
+    args.add_argument('--embedding', type=int, default=20)
     args.add_argument('--threshold', type=float, default=0.5)
     config = args.parse_args()
 
@@ -115,27 +97,31 @@ if __name__ == '__main__':
     # 모델의 specification
     input_size = config.embedding*config.strmaxlen
     output_size = 1
-    hidden_layer_size = 200
-    learning_rate = 0.001
+    learning_rate = 0.01
     character_size = 251
 
     x = tf.placeholder(tf.int32, [None, config.strmaxlen])
     y_ = tf.placeholder(tf.float32, [None, output_size])
+    keep_probs = tf.placeholder(tf.float32)
     # 임베딩
     char_embedding = tf.get_variable('char_embedding', [character_size, config.embedding])
-    embedded = tf.nn.embedding_lookup(char_embedding, x)
+    embedded_chars_base = tf.nn.embedding_lookup(char_embedding, x)
+    embedded = tf.expand_dims(embedded_chars_base, -1)
+    print("emb", embedded.shape)
+    ## MODEL
+    l3_1 = tf.layers.conv2d(embedded, 512, [3, config.embedding], activation=tf.nn.relu)
+    print("l3-1", l3_1.shape)
+    l3_1 = tf.layers.max_pooling2d(l3_1, [character_size-3+1, 1])
+    print("l3-1 pool", l3_1.shape)
+    l3_2 = tf.layers.conv2d(l3_1, 1024, [3, config.embedding], activation=tf.nn.relu)
+    l3_2 = tf.layers.max_pooling2d(l3_2, [character_size-3+1, 1])
+    l3_3 = tf.layers.conv2d(l3_2, 512, [3, config.embedding], activation=tf.nn.relu)
+    l3_3 = tf.layers.max_pooling2d(l3_3, [character_size-3+1, 1])
+    flatten = tf.fontrib.layers.flatten(l3_3)
+    
+    drop = tf.layers.dropout(l3_2, keep_probs)
+    output_sigmoid = tf.layers.dense(flatten, output_size, activation=tf.nn.sigmoid)
 
-    # 첫 번째 레이어
-    first_layer_weight = weight_variable([input_size, hidden_layer_size])
-    first_layer_bias = bias_variable([hidden_layer_size])
-    hidden_layer = tf.matmul(tf.reshape(embedded, (-1, input_size)),
-                             first_layer_weight) + first_layer_bias
-
-    # 두 번째 (아웃풋) 레이어
-    second_layer_weight = weight_variable([hidden_layer_size, output_size])
-    second_layer_bias = bias_variable([output_size])
-    output = tf.matmul(hidden_layer, second_layer_weight) + second_layer_bias
-    output_sigmoid = tf.sigmoid(output)
 
     # loss와 optimizer
     binary_cross_entropy = tf.reduce_mean(-(y_ * tf.log(output_sigmoid)) - (1-y_) * tf.log(1-output_sigmoid))
@@ -163,7 +149,7 @@ if __name__ == '__main__':
             avg_loss = 0.0
             for i, (data, labels) in enumerate(_batch_loader(dataset, config.batch)):
                 _, loss = sess.run([train_step, binary_cross_entropy],
-                                   feed_dict={x: data, y_: labels})
+                                   feed_dict={x: data, y_: labels, keep_probs: 0.9})
                 print('Batch : ', i + 1, '/', one_batch_size,
                       ', BCE in this minibatch: ', float(loss))
                 avg_loss += float(loss)
@@ -183,4 +169,4 @@ if __name__ == '__main__':
         for batch in _batch_loader(queries, config.batch):
             temp_res = nsml.infer(batch)
             res += temp_res
-    print(res)
+        print(res)
