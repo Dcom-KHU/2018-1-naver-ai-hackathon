@@ -8,7 +8,7 @@ import tensorflow as tf
 
 import nsml
 from nsml import DATASET_PATH, HAS_DATASET, IS_ON_NSML
-from dataset import KinQueryDataset, preprocess
+from dataset import MovieReviewDataset, preprocess
 
 
 # DONOTCHANGE: They are reserved for nsml
@@ -84,20 +84,20 @@ if __name__ == '__main__':
 
     # User options
     args.add_argument('--output', type=int, default=1)
-    args.add_argument('--epochs', type=int, default=200)
+    args.add_argument('--epochs', type=int, default=10)
     args.add_argument('--batch', type=int, default=3000)
-    args.add_argument('--strmaxlen', type=int, default=400)
+    args.add_argument('--strmaxlen', type=int, default=300)
     args.add_argument('--embedding', type=int, default=50)
     args.add_argument('--threshold', type=float, default=0.5)
     config = args.parse_args()
 
     if not HAS_DATASET and not IS_ON_NSML:  # It is not running on nsml
-        DATASET_PATH = '../sample_data/kin/'
+        DATASET_PATH = '../sample_data/movie/'
 
     # 모델의 specification
     input_size = config.embedding*config.strmaxlen
     output_size = 1
-    learning_rate = 0.0003
+    learning_rate = 0.001
     character_size = 251
 
     x = tf.placeholder(tf.int32, [None, config.strmaxlen])
@@ -128,11 +128,11 @@ if __name__ == '__main__':
     dense = tf.layers.dense(flatten, 256, activation=tf.nn.relu)
 
     drop = tf.layers.dropout(dense, keep_probs)
-    output_sigmoid = tf.layers.dense(drop, output_size, activation=tf.nn.sigmoid)
+    output_sigmoid = 10*tf.layers.dense(drop, output_size, activation=tf.nn.sigmoid)
 
 
     # loss와 optimizer
-    binary_cross_entropy = tf.reduce_mean(-(y_ * tf.log(output_sigmoid)) - (1-y_) * tf.log(1-output_sigmoid))
+    binary_cross_entropy = -tf.reduce_sum(y_*tf.log(tf.clip_by_value(tf.nn.log_softmax(output_sigmoid),1e-10,1.0)))
     train_step = tf.train.AdamOptimizer(learning_rate).minimize(binary_cross_entropy)
 
     sess = tf.InteractiveSession()
@@ -147,7 +147,7 @@ if __name__ == '__main__':
 
     if config.mode == 'train':
         # 데이터를 로드합니다.
-        dataset = KinQueryDataset(DATASET_PATH, config.strmaxlen)
+        dataset = MovieReviewDataset(DATASET_PATH, config.strmaxlen)
         dataset_len = len(dataset)
         one_batch_size = dataset_len//config.batch
         if dataset_len % config.batch != 0:
