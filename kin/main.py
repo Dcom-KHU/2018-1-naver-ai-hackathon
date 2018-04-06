@@ -84,10 +84,10 @@ if __name__ == '__main__':
 
     # User options
     args.add_argument('--output', type=int, default=1)
-    args.add_argument('--epochs', type=int, default=10)
+    args.add_argument('--epochs', type=int, default=100)
     args.add_argument('--batch', type=int, default=3000)
     args.add_argument('--strmaxlen', type=int, default=400)
-    args.add_argument('--embedding', type=int, default=20)
+    args.add_argument('--embedding', type=int, default=30)
     args.add_argument('--threshold', type=float, default=0.5)
     config = args.parse_args()
 
@@ -97,30 +97,39 @@ if __name__ == '__main__':
     # 모델의 specification
     input_size = config.embedding*config.strmaxlen
     output_size = 1
-    learning_rate = 0.01
+    learning_rate = 0.001
     character_size = 251
 
     x = tf.placeholder(tf.int32, [None, config.strmaxlen])
     y_ = tf.placeholder(tf.float32, [None, output_size])
     keep_probs = tf.placeholder(tf.float32)
     # 임베딩
-    char_embedding = tf.get_variable('char_embedding', [character_size, config.embedding])
-    embedded_chars_base = tf.nn.embedding_lookup(char_embedding, x)
-    embedded = tf.expand_dims(embedded_chars_base, -1)
-    print("emb", embedded.shape)
-    ## MODEL
-    l3_1 = tf.layers.conv2d(embedded, 512, [3, config.embedding], activation=tf.nn.relu)
-    print("l3-1", l3_1.shape)
-    l3_1 = tf.layers.max_pooling2d(l3_1, [character_size-3+1, 1])
-    print("l3-1 pool", l3_1.shape)
-    l3_2 = tf.layers.conv2d(l3_1, 1024, [3, config.embedding], activation=tf.nn.relu)
-    l3_2 = tf.layers.max_pooling2d(l3_2, [character_size-3+1, 1])
-    l3_3 = tf.layers.conv2d(l3_2, 512, [3, config.embedding], activation=tf.nn.relu)
-    l3_3 = tf.layers.max_pooling2d(l3_3, [character_size-3+1, 1])
-    flatten = tf.fontrib.layers.flatten(l3_3)
+    with tf.name_scope('embedding'):
+        char_embedding = tf.get_variable('char_embedding', [character_size, config.embedding])
+        embedded_chars_base = tf.nn.embedding_lookup(char_embedding, x)
+        embedded = tf.expand_dims(embedded_chars_base, -1)
+        print("emb", embedded.shape)
     
-    drop = tf.layers.dropout(l3_2, keep_probs)
-    output_sigmoid = tf.layers.dense(flatten, output_size, activation=tf.nn.sigmoid)
+    # MODEL
+    l2_conv = tf.layers.conv2d(embedded, 256, [2, config.embedding], activation=tf.nn.relu)
+    print("l2", l2_conv.shape)
+    l2_pool = tf.layers.max_pooling2d(l2_conv, [character_size-2+1, 1], strides=(1,1))
+    print("l2 pool", l2_pool.shape)
+
+    l3_conv = tf.layers.conv2d(embedded, 256, [3, config.embedding], activation=tf.nn.relu)
+    print("l3", l3_conv.shape)
+    l3_pool = tf.layers.max_pooling2d(l3_conv, [character_size-3+1, 1], strides=(1,1))
+    print("l3 pool", l3_pool.shape)
+
+    concat = tf.concat([l2_pool, l3_pool], 3)
+    print('concat', concat.shape)
+    flatten = tf.contrib.layers.flatten(concat)
+    print('flattne', flatten.shape)
+
+    dense = tf.layers.dense(flatten, 256, activation=tf.nn.relu)
+
+    drop = tf.layers.dropout(dense, keep_probs)
+    output_sigmoid = tf.layers.dense(drop, output_size, activation=tf.nn.sigmoid)
 
 
     # loss와 optimizer
@@ -149,7 +158,7 @@ if __name__ == '__main__':
             avg_loss = 0.0
             for i, (data, labels) in enumerate(_batch_loader(dataset, config.batch)):
                 _, loss = sess.run([train_step, binary_cross_entropy],
-                                   feed_dict={x: data, y_: labels, keep_probs: 0.9})
+                                   feed_dict={x: data, y_: labels, keep_probs: 1.})
                 print('Batch : ', i + 1, '/', one_batch_size,
                       ', BCE in this minibatch: ', float(loss))
                 avg_loss += float(loss)
