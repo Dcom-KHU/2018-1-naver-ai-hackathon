@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
-from konlpy.corpus import kolaw
+
+import json
+
 def read_data(filename):
     with open(filename, 'r') as f:
         data = [line.split('\t') for line in f.read().splitlines()]
         data = data[1:]   # header 제외
     return data
 
-train_data = kolaw.open('constitution.txt').read()
-
-print(len(train_data))      # nrows: 150000
-print(len(train_data[0]))
+print(len(train_data))
+print(train_data[0])
 
 from konlpy.tag import Twitter
 pos_tagger = Twitter()
@@ -20,12 +20,12 @@ def tokenize(doc):
 
 train_docs = []
 for row in train_data:
-    train_docs.append((tokenize(row[0]), '0'))
+    train_docs.append((tokenize(row), '0'))
     # train_docs.append((tokenize(row[1]), '0'))
 
 # 잘 들어갔는지 확인
 from pprint import pprint
-pprint(train_docs[0])
+pprint(train_docs[0:2])
 
 from gensim.models.doc2vec import TaggedDocument
 tagged_train_docs = [TaggedDocument(d, [c]) for d, c in train_docs]
