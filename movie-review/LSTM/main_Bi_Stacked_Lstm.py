@@ -118,7 +118,7 @@ if __name__ == '__main__':
     # User options
     args.add_argument('--output', type=int, default=1)
     args.add_argument('--epochs', type=int, default=60)
-    args.add_argument('--batch', type=int, default=2000)
+    args.add_argument('--batch', type=int, default=3000)
     args.add_argument('--strmaxlen', type=int, default=200)
     args.add_argument('--embedding', type=int, default=64)
     config = args.parse_args()
@@ -131,7 +131,7 @@ if __name__ == '__main__':
     output_dim = 1
     hidden_dim = 128
     stack_num = 3
-    learning_rate = 0.0001
+    learning_rate = 0.01
     character_size = 251
 
     # placeholder

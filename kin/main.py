@@ -57,11 +57,17 @@ def bind_model(sess, config):
         :param kwargs:
         :return:
         """
+
+        sequence = []
+        for i in range(len(raw_data)):
+            sequence.append(len(raw_data[i]))
+
         # dataset.py에서 작성한 preprocess 함수를 호출하여, 문자열을 벡터로 변환합니다
         preprocessed_data = preprocess(raw_data, config.strmaxlen)
         # 저장한 모델에 입력값을 넣고 prediction 결과를 리턴받습니다
-        pred = sess.run(output_sigmoid, feed_dict={x: preprocessed_data})
-        clipped = np.array(pred > config.threshold, dtype=np.int)
+        pred = sess.run(output_sigmoid, feed_dict={x: preprocessed_data, keep_prob: 1.0, sequence_list: sequence})
+        point = tf.reshape(pred, [len(pred)])
+        # clipped = np.array(pred > config.threshold, dtype=np.int)
         # DONOTCHANGE: They are reserved for nsml
         # 리턴 결과는 [(확률, 0 or 1)] 의 형태로 보내야만 리더보드에 올릴 수 있습니다. 리더보드 결과에 확률의 값은 영향을 미치지 않습니다
         return list(zip(pred.flatten(), clipped.flatten()))
@@ -92,6 +98,10 @@ def bias_variable(shape):
     initial = tf.constant(0.1, shape=shape)
     return tf.Variable(initial)
 
+def lstm_cell(num_units, keep_prob):
+    cell = tf.contrib.rnn.BasicLSTMCell(num_units=num_units, activation=tf.nn.softsign)
+    cell = tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=keep_prob)
+    return cell
 
 if __name__ == '__main__':
     args = argparse.ArgumentParser()
@@ -114,32 +124,66 @@ if __name__ == '__main__':
 
     # 모델의 specification
     input_size = config.embedding*config.strmaxlen
-    output_size = 1
-    hidden_layer_size = 200
+    output_dim = 1
+    hidden_dim = 128
+    stack_num = 3
     learning_rate = 0.001
     character_size = 251
 
     x = tf.placeholder(tf.int32, [None, config.strmaxlen])
-    y_ = tf.placeholder(tf.float32, [None, output_size])
+    y_ = tf.placeholder(tf.float32, [None, output_dim])
+    keep_prob = tf.placeholder(tf.float32)
+    sequence_list = tf.placeholder(tf.int32, [None])
     # 임베딩
     char_embedding = tf.get_variable('char_embedding', [character_size, config.embedding])
     embedded = tf.nn.embedding_lookup(char_embedding, x)
 
-    # 첫 번째 레이어
-    first_layer_weight = weight_variable([input_size, hidden_layer_size])
-    first_layer_bias = bias_variable([hidden_layer_size])
-    hidden_layer = tf.matmul(tf.reshape(embedded, (-1, input_size)),
-                             first_layer_weight) + first_layer_bias
+    # # 첫 번째 레이어
+    # first_layer_weight = weight_variable([input_size, hidden_layer_size])
+    # first_layer_bias = bias_variable([hidden_layer_size])
+    # hidden_layer = tf.matmul(tf.reshape(embedded, (-1, input_size)),
+    #                          first_layer_weight) + first_layer_bias
 
-    # 두 번째 (아웃풋) 레이어
-    second_layer_weight = weight_variable([hidden_layer_size, output_size])
-    second_layer_bias = bias_variable([output_size])
-    output = tf.matmul(hidden_layer, second_layer_weight) + second_layer_bias
-    output_sigmoid = tf.sigmoid(output)
+    # # 두 번째 (아웃풋) 레이어
+    # second_layer_weight = weight_variable([hidden_layer_size, output_size])
+    # second_layer_bias = bias_variable([output_size])
+    # output = tf.matmul(hidden_layer, second_layer_weight) + second_layer_bias
+    # output_sigmoid = tf.sigmoid(output)
 
-    # loss와 optimizer
-    binary_cross_entropy = tf.reduce_mean(-(y_ * tf.log(output_sigmoid)) - (1-y_) * tf.log(1-output_sigmoid))
-    train_step = tf.train.AdamOptimizer(learning_rate).minimize(binary_cross_entropy)
+    # # loss와 optimizer
+    # binary_cross_entropy = tf.reduce_mean(-(y_ * tf.log(output_sigmoid)) - (1-y_) * tf.log(1-output_sigmoid))
+    # train_step = tf.train.AdamOptimizer(learning_rate).minimize(binary_cross_entropy)
+
+    # LSTM layer
+
+    cell_fw = [lstm_cell(hidden_dim, keep_prob) for _ in range(stack_num)]
+    cell_bw = [lstm_cell(hidden_dim, keep_prob) for _ in range(stack_num)]
+
+    with tf.variable_scope("L1"):
+        (output_fw0, output_bw0), last_state0 = tf.nn.bidirectional_dynamic_rnn(cell_fw[0], cell_bw[0], embedded,
+                                                                             dtype=tf.float32, sequence_length=sequence_list)
+        output0_0 = tf.concat([output_fw0, output_bw0], axis=2)
+        
+    with tf.variable_scope("L2"):
+        (output_fw1, output_bw1), last_state1 = tf.nn.bidirectional_dynamic_rnn(cell_fw[1], cell_bw[1], output0_0,
+                                                                             dtype=tf.float32, sequence_length=sequence_list)
+        output0_1 = tf.concat([output_fw1, output_bw1], axis=2)
+
+    with tf.variable_scope("L3"):
+        (output_fw2, output_bw2), last_state2 = tf.nn.bidirectional_dynamic_rnn(cell_fw[2], cell_bw[2], output0_1,
+                                                                             dtype=tf.float32, sequence_length=sequence_list)
+        output = tf.concat([output_fw2, output_bw2], axis=2)
+
+
+    range1 = tf.range(tf.shape(sequence_list)[0])
+    output2 = tf.gather_nd(output, tf.stack((range1, sequence_list - 1), -1))
+    output3 = tf.contrib.layers.fully_connected(output2, output_dim, activation_fn=tf.identity)
+    #output_sigmoid = output3
+    output_sigmoid = (tf.sigmoid(output3) * 9) + 1
+
+    # loss와 optimizer  
+    linear_regression = tf.reduce_mean(tf.square(output_sigmoid - y_))
+    train_step = tf.train.AdamOptimizer(learning_rate).minimize(linear_regression)
 
     sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
@@ -161,9 +205,9 @@ if __name__ == '__main__':
         # epoch마다 학습을 수행합니다.
         for epoch in range(config.epochs):
             avg_loss = 0.0
-            for i, (data, labels) in enumerate(_batch_loader(dataset, config.batch)):
-                _, loss = sess.run([train_step, binary_cross_entropy],
-                                   feed_dict={x: data, y_: labels})
+            for i, (data, labels, sequence) in enumerate(_batch_loader(dataset, config.batch)):
+                _, loss = sess.run([train_step, linear_regression],
+                                   feed_dict={x: data, y_: labels, keep_prob: 0.7, sequence_list: sequence})
                 print('Batch : ', i + 1, '/', one_batch_size,
                       ', BCE in this minibatch: ', float(loss))
                 avg_loss += float(loss)
@@ -183,4 +227,4 @@ if __name__ == '__main__':
         for batch in _batch_loader(queries, config.batch):
             temp_res = nsml.infer(batch)
             res += temp_res
-    print(res)
+        print(res)

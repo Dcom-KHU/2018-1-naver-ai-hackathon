@@ -1,9 +1,11 @@
-import json
+import ijson
+import pandas as pd
 
 filename = 'corpus/namuwiki_20160229.json'
 # Read file to memory, it takes some time.
-with open(filename) as data_file:    
-    data = json.load(data_file)
+with open(filename, 'r') as f:
+    objects = ijson.items(f, 'meta.view.columns.item')
+    columns = list(objects)
 
 # this black list article does not contain natural language knowledge
 black_list_title = ['공지사항/차단 내역/통합본']

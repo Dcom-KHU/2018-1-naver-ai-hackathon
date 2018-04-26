@@ -1,1 +1,2 @@
 movie2/corpus/*
+**/__pycache__/

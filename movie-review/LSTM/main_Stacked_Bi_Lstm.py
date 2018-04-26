@@ -131,7 +131,7 @@ if __name__ == '__main__':
     output_dim = 1
     hidden_dim = 128
     stack_num = 3
-    learning_rate = 0.0001
+    learning_rate = 0.01
     character_size = 251
 
     # placeholder
