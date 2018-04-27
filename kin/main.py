@@ -42,7 +42,7 @@ def bind_model(sess, config):
         # dataset.py에서 작성한 preprocess 함수를 호출하여, 문자열을 벡터로 변환합니다
         preprocessed_data = preprocess(raw_data, config.strmaxlen)
         # 저장한 모델에 입력값을 넣고 prediction 결과를 리턴받습니다
-        pred = sess.run(output_sigmoid, feed_dict={x: preprocessed_data})
+        pred = sess.run(output_sigmoid, feed_dict={x: preprocessed_data, keep_probs: 1})
         clipped = np.array(pred > config.threshold, dtype=np.int)
         # DONOTCHANGE: They are reserved for nsml
         # 리턴 결과는 [(확률, 0 or 1)] 의 형태로 보내야만 리더보드에 올릴 수 있습니다. 리더보드 결과에 확률의 값은 영향을 미치지 않습니다
@@ -84,10 +84,10 @@ if __name__ == '__main__':
 
     # User options
     args.add_argument('--output', type=int, default=1)
-    args.add_argument('--epochs', type=int, default=200)
+    args.add_argument('--epochs', type=int, default=100)
     args.add_argument('--batch', type=int, default=3000)
     args.add_argument('--strmaxlen', type=int, default=400)
-    args.add_argument('--embedding', type=int, default=50)
+    args.add_argument('--embedding', type=int, default=100)
     args.add_argument('--threshold', type=float, default=0.5)
     config = args.parse_args()
 
@@ -157,7 +157,7 @@ if __name__ == '__main__':
             avg_loss = 0.0
             for i, (data, labels) in enumerate(_batch_loader(dataset, config.batch)):
                 _, loss = sess.run([train_step, binary_cross_entropy],
-                                   feed_dict={x: data, y_: labels, keep_probs: 1.})
+                                   feed_dict={x: data, y_: labels, keep_probs: 0.7})
                 print('Batch : ', i + 1, '/', one_batch_size,
                       ', BCE in this minibatch: ', float(loss))
                 avg_loss += float(loss)
